@@ -107,6 +107,10 @@ void csim(int vflag, int s, int E, int b,
             ;
     }
     fclose(fp);
+
+    for(i = 0; i < (1 << s); ++i)
+        free(cache[i]);
+    free(cache);
 }
 
 int main(int argc, char *argv[])
