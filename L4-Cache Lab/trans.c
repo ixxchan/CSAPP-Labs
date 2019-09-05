@@ -12,6 +12,20 @@
 
 int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 
+void trans_block(int Bsize, int M, int N, int A[N][M], int B[M][N])
+{
+    int i, j, ii, jj;
+
+    for (j = 0; j < M; j+=Bsize) {
+        for (i = 0; i < N; i+=Bsize) {
+            for (ii = i; ii < i+Bsize && ii < N; ++ii)
+                for(jj = j; jj < j+Bsize && jj < M; ++jj)
+                    B[jj][ii] = A[ii][jj];
+        }
+    }    
+
+}
+void trans_a(int M, int N, int A[N][M], int B[M][N]);
 /* 
  * transpose_submit - This is the solution transpose function that you
  *     will be graded on for Part B of the assignment. Do not change
@@ -22,6 +36,13 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
+    if(M == 61)
+        trans_block(16, M, N, A, B);
+    else if (M == 32)
+        trans_block(8, M, N, A, B);
+    else
+        trans_block(4, M, N, A, B);
+    // trans_a(M,N,A,B);
 }
 
 /* 
@@ -46,6 +67,20 @@ void trans(int M, int N, int A[N][M], int B[M][N])
 
 }
 
+char trans_a_desc[] = "trial";
+void trans_a(int M, int N, int A[N][M], int B[M][N])
+{
+    int ii, j, k, Bsize = 8;
+
+    for (j = 0; j < M; j+=Bsize) {
+        for (ii = 0; ii < N; ii++) {
+            for(k = 0; k < Bsize && j + k < M; ++k)
+                B[j+k][ii] = A[ii][j+k];
+        }
+    }    
+
+}
+
 /*
  * registerFunctions - This function registers your transpose
  *     functions with the driver.  At runtime, the driver will
@@ -59,7 +94,7 @@ void registerFunctions()
     registerTransFunction(transpose_submit, transpose_submit_desc); 
 
     /* Register any additional transpose functions */
-    registerTransFunction(trans, trans_desc); 
+    // registerTransFunction(trans_a, trans_a_desc); 
 
 }
 
