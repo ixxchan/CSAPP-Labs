@@ -61,96 +61,62 @@ team_t team = {
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)))
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE((char *)(bp) - DSIZE))
 
-#define PREDP(bp) ((char *)(bp))
-#define SUCCP(bp) ((char *)(bp)+WSIZE)
-
-#define GET_PRED(bp) (*(char **)PREDP(bp))
-#define GET_SUCC(bp) (*(char **)SUCCP(bp))
-
-#define PUTP(p, pval) (*(char **)(p) = (char *)(pval))
-
 #define CHECK(bp) (printf("bp:%u, SIZE:%d, ALLOC:%d\n",(unsigned int)bp, GET_SIZE(HDRP(bp)), GET_ALLOC(HDRP(bp))))
-#define DEBUG 0
+
 static char *heap_listp = 0;
 
 int mm_check(void)
 {
     void *bp = heap_listp;
-    int cnt = 0;
+    printf("check heap_listp");CHECK(heap_listp);
     while(GET(HDRP(bp)) != PACK(0,1))
     {
-        printf("check node %u, SIZE %u, ALLOC %u, PRED %u, SUCC %u\n", 
-            (unsigned int)bp, (unsigned int)GET_SIZE(HDRP(bp)),(unsigned int)GET_ALLOC(HDRP(bp)),(unsigned int)GET_PRED(bp),(unsigned int)GET_SUCC(bp));
-        bp = GET_SUCC(bp);
-        cnt++;
-        if(cnt > 10)
+        if(GET(HDRP(bp)) == 0)
         {
-            printf("maybe dead loop"); return -1;
+            printf("FIND SIZE 0 ALLOC 0 BLOCK %u!\n",(unsigned int)bp);
+            return -1;
         }
+        else
+            bp = NEXT_BLKP(bp);
     }
-    printf("check epilogue %u, SIZE %u, ALLOC %u, PRED %u\n", (unsigned int)bp,(unsigned int)GET_SIZE(HDRP(bp)),(unsigned int)GET_ALLOC(HDRP(bp)),(unsigned int)GET_PRED(bp)); 
+    printf("SAFE!\n");
     return 0;
-}
-void delete_node(void *bp);
-inline void delete_node(void *bp)
-{
-    PUTP(SUCCP(GET_PRED(bp)), GET_SUCC(bp));
-    PUTP(PREDP(GET_SUCC(bp)), GET_PRED(bp));
-}
-
-void insert_node(void *bp);
-/* insert after prologue */
-inline void insert_node(void *bp)
-{
-    PUTP(PREDP(bp), heap_listp);
-    PUTP(SUCCP(bp), GET_SUCC(heap_listp));
-    PUTP(PREDP(GET_SUCC(bp)),bp);
-    PUTP(SUCCP(heap_listp), bp);
 }
 
 static void *coalesce(void *bp)
 {
-    if(DEBUG)
-        {printf("before coalesce %u\n",(unsigned int)bp); mm_check(); }
     size_t size = GET_SIZE(HDRP(bp));
     unsigned int prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     unsigned int next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    if(DEBUG)printf("prev %u %u next %u %u\n",PREV_BLKP(bp),prev_alloc,NEXT_BLKP(bp),next_alloc);
+
     if (prev_alloc && next_alloc)
     {
-        return bp;
     }
 
     else if (prev_alloc && !next_alloc)
     {
-        delete_node(bp);
-        delete_node(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
     }
 
     else if (!prev_alloc && next_alloc)
     {
-        delete_node(bp);
-        delete_node(PREV_BLKP(bp));
-        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         bp = PREV_BLKP(bp);
+        size += GET_SIZE(HDRP(bp));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
     }
 
     else
     {
-        delete_node(bp);
-        delete_node(PREV_BLKP(bp));
-        delete_node(NEXT_BLKP(bp));
         size += GET_SIZE(HDRP(NEXT_BLKP(bp))); 
-        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         bp = PREV_BLKP(bp);
+        size += GET_SIZE(HDRP(bp));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
     }           
-   
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
-    insert_node(bp);
-     if(DEBUG)
-        {printf("after coalesce %u\n",(unsigned int)bp); mm_check(); }
+    
     return bp;
 }
 
@@ -163,15 +129,10 @@ static void *extend_heap(size_t words)
     if ((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
     
-    bp -= WSIZE;
     PUT(HDRP(bp), PACK(size, 0)); /* free block header */
     PUT(FTRP(bp), PACK(size, 0)); /* free block footper */
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
-    PUTP(PREDP(NEXT_BLKP(bp)), GET_PRED(bp)); /* new epilogue's pred -> old epilogue's pred */
-    PUTP(SUCCP(GET_PRED(bp)), NEXT_BLKP(bp)); /* old epilogue's pred's succ -> new epilogue */
-    if(DEBUG){printf("before insert \n");mm_check();}
-    insert_node(bp);
-   
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue */
+
     /* Coalesce if the previous block was free */
     return coalesce(bp); 
 }
@@ -181,21 +142,14 @@ static void *extend_heap(size_t words)
  */
 int mm_init(void)
 {
-    if ((heap_listp = mem_sbrk(7*WSIZE)) == (void *) -1)
+    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *) -1)
         return -1;
-    PUT(heap_listp + 0*WSIZE, 0); /* padding */
-    PUT(heap_listp + 1*WSIZE, PACK(4*WSIZE,1)); /* prologue header */
-    PUTP(heap_listp + 2*WSIZE, NULL); /* prologue pred */
-    PUTP(heap_listp + 3*WSIZE, heap_listp + 6*WSIZE); /* prologue succ */
-    PUT(heap_listp + 4*WSIZE, PACK(4*WSIZE,1));    /* prologue footer */
-    PUT(heap_listp + 5*WSIZE, PACK(0, 1)); /* epilogue header */
-    PUTP(heap_listp + 6*WSIZE, heap_listp + 2*WSIZE); /* epilogue pred */
+    PUT(heap_listp, 0);                       /* padding */
+    PUT(heap_listp + 1*WSIZE, PACK(DSIZE,1)); /* prologue header */
+    PUT(heap_listp + 2*WSIZE, PACK(DSIZE,1)); /* prologue footer */
+    PUT(heap_listp + 3*WSIZE, PACK(0, 1));    /* epilogue header */
     heap_listp += 2 * WSIZE;
-    if (DEBUG)
-    {    
-        printf("heap_listp init %u\n",(unsigned int)heap_listp);
-        mm_check();
-    }
+
     /* Extend the heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
         return -1;
@@ -205,47 +159,33 @@ int mm_init(void)
 /* first fit search */
 static void *find_fit(size_t aligned_size)
 {
-   // //printf("\nfind fit heaplistp %u, SUCC %u GETSUCC %u\n",heap_listp,SUCCP(heap_listp),GET_SUCC(heap_listp));
-    char *bp = GET_SUCC(heap_listp);
-   // //printf("find fit %u bp %u HDR%u\n",aligned_size,(unsigned int)bp, (HDRP(bp)));
-    while(GET_ALLOC(HDRP(bp)) == 0)
+    char *bp = heap_listp;
+    while(GET(HDRP(bp)) != PACK(0,1))
     {
-        if(GET_SIZE(HDRP(bp)) >= aligned_size)
+        if(GET_ALLOC(HDRP(bp)) == 0 && GET_SIZE(HDRP(bp)) >= aligned_size)
             return bp;
         else
-            bp = GET_SUCC(bp);
+            bp = NEXT_BLKP(bp);
     }
     return NULL;
 }
 
 static void place(void *bp, size_t aligned_size)
 {
-    //printf("place %u, %u, HDR %u SIZE %u ",bp,aligned_size,HDRP(bp),GET_SIZE(HDRP(bp)));
-    //printf("brk %u\n",mem_sbrk(0));
     size_t prev_size = GET_SIZE(HDRP(bp));
     size_t remainder_size = prev_size - aligned_size;
-    char *succp = GET_SUCC(bp);
-    char *predp = GET_PRED(bp);
 
     if(remainder_size < 4 * WSIZE)
     {
-        PUTP(SUCCP(predp), succp);
-        PUTP(PREDP(succp), predp);
         PUT(HDRP(bp), PACK(prev_size, 1));
         PUT(FTRP(bp), PACK(prev_size, 1));
     }
     else /* need splitting */
     {
-        if(DEBUG)printf("split %u, succp %u, predp %u\n",(unsigned int)bp,(unsigned int)succp,(unsigned int)predp);
         PUT(HDRP(bp), PACK(aligned_size, 1));
         PUT(FTRP(bp), PACK(aligned_size, 1));
-        bp = NEXT_BLKP(bp);
-        PUT(HDRP(bp), PACK(remainder_size, 0));
-        PUT(FTRP(bp), PACK(remainder_size, 0));
-        PUTP(SUCCP(bp), succp);
-        PUTP(PREDP(bp), predp);
-        PUTP(SUCCP(predp), bp);
-        PUTP(PREDP(succp), bp);
+        PUT(HDRP(NEXT_BLKP(bp)), PACK(remainder_size, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(remainder_size, 0));
     }
 }
 /* 
@@ -256,7 +196,7 @@ void *mm_malloc(size_t size)
 {
     char *bp;
     size_t extend_size;
-    if (DEBUG) {printf("malloc %u\n",size);mm_check();}
+
     if(size == 0)
         return NULL;
 
@@ -284,11 +224,9 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-    if(DEBUG){printf("free %u\n",ptr);mm_check();}
     size_t size = GET_SIZE(HDRP(ptr));
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
-    insert_node(ptr);
     coalesce(ptr);
 }
 
@@ -311,4 +249,17 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(oldptr);
     return newptr;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
