@@ -93,6 +93,7 @@ void Sigaddset(sigset_t *set, int signum);
 pid_t Fork(void);
 void Execve(const char *filename, char *const argv[], char *const envp[]);
 void Setpgid(pid_t pid, pid_t pgid);
+void Kill(pid_t pid, int signum);
 
 /*
  * main - The shell's main routine 
@@ -295,6 +296,41 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
+    int jid;
+    pid_t pid;
+    struct job_t *job;
+
+    if (argv[1] == NULL) {
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+
+    if (sscanf(argv[1], "%%%d", &jid) > 0) {
+        job = getjobjid(jobs, jid);
+        if (job == NULL) {
+            printf("%%%d: No such job\n", jid);
+            return;
+        }
+    }
+    else if (sscanf(argv[1], "%d", &pid) > 0) {
+        job = getjobpid(jobs, pid);
+        if (job == NULL) {
+            printf("(%d): No such process\n", pid);
+            return;
+        }
+    }
+    else {
+        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+    
+    /* restart job */
+    Kill(job->pid, SIGCONT);
+    job->state = BG;
+    if (strcmp(argv[0], "fg") == 0) {
+        job->state = FG;
+        waitfg(job->pid);
+    }
     return;
 }
 
@@ -303,6 +339,9 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    while (fgpid(jobs) != 0) {
+        sleep(1);
+    }
     return;
 }
 
@@ -561,6 +600,10 @@ void sigquit_handler(int sig)
     exit(1);
 }
 
+/************************************
+ * Some wrappers for the system calls
+ ************************************/
+
 void Sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
 {
     if (sigprocmask(how, set, oldset) < 0)
@@ -610,4 +653,12 @@ void Setpgid(pid_t pid, pid_t pgid) {
     if ((rc = setpgid(pid, pgid)) < 0)
 	unix_error("Setpgid error");
     return;
+}
+
+void Kill(pid_t pid, int signum) 
+{
+    int rc;
+
+    if ((rc = kill(pid, signum)) < 0)
+	unix_error("Kill error");
 }
