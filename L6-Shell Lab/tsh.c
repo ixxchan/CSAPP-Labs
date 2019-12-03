@@ -91,7 +91,6 @@ void Sigemptyset(sigset_t *set);
 void Sigfillset(sigset_t *set);
 void Sigaddset(sigset_t *set, int signum);
 pid_t Fork(void);
-void Execve(const char *filename, char *const argv[], char *const envp[]);
 void Setpgid(pid_t pid, pid_t pgid);
 void Kill(pid_t pid, int signum);
 
@@ -197,8 +196,10 @@ void eval(char *cmdline)
     if ((pid = Fork()) == 0) { /* Child process */
         Sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
         Setpgid(0, 0); /* set the child's group ID to its PID */
-        Execve(argv[0], argv, NULL);
-        exit(0);
+        if (execve(argv[0], argv, NULL) == -1) {
+            printf("%s: Command not found\n", argv[0]);
+            exit(0);
+        }
     }
 
     /* Parent process */
@@ -618,12 +619,6 @@ pid_t Fork(void)
     if ((pid = fork()) < 0)
 	unix_error("Fork error");
     return pid;
-}
-
-void Execve(const char *filename, char *const argv[], char *const envp[]) 
-{
-    if (execve(filename, argv, envp) < 0)
-	unix_error("Execve error");
 }
 
 void Sigemptyset(sigset_t *set)
