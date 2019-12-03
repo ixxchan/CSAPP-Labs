@@ -1,7 +1,7 @@
 /* 
  * tsh - A tiny shell program with job control
  * 
- * <Put your name and login ID here>
+ * xxchan
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +85,15 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
+/* Some wrappers for the system calls */
+void Sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+void Sigemptyset(sigset_t *set);
+void Sigfillset(sigset_t *set);
+void Sigaddset(sigset_t *set, int signum);
+pid_t Fork(void);
+void Execve(const char *filename, char *const argv[], char *const envp[]);
+void Setpgid(pid_t pid, pid_t pgid);
+
 /*
  * main - The shell's main routine 
  */
@@ -165,6 +174,42 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    char *argv[MAXARGS];
+    int bg;
+    pid_t pid;
+    sigset_t mask_one, mask_all, prev_one;
+
+    Sigemptyset(&mask_one);
+    Sigfillset(&mask_all);
+    Sigaddset(&mask_one, SIGCHLD);
+
+    bg = parseline(cmdline, argv);
+    if (argv[0] == NULL) { /* empty line */
+    return;
+    }
+
+    if (builtin_cmd(argv) != 0) { /* builtin cmd */
+    return;
+    }
+
+    Sigprocmask(SIG_BLOCK, &mask_one, &prev_one); /* Block SIGCHLD */
+    if ((pid = Fork()) == 0) { /* Child process */
+        Sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
+        Setpgid(0, 0); /* set the child's group ID to its PID */
+        Execve(argv[0], argv, NULL);
+        exit(0);
+    }
+
+    /* Parent process */
+    Sigprocmask(SIG_BLOCK, &mask_all, NULL); 
+    addjob(jobs, pid, bg?BG:FG, cmdline); /* Add the child to the job list */
+    Sigprocmask(SIG_SETMASK, &prev_one, NULL); /* Unblock SIGCHLD */
+    if (!bg) { 
+        waitfg(pid);
+    }
+    else {
+        printf("[%d] (%d) %s\n", pid2jid(pid), pid, cmdline);
+    }
     return;
 }
 
@@ -231,6 +276,17 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if (strcmp(argv[0], "bg") == 0 || strcmp(argv[0], "fg") == 0) {
+    do_bgfg(argv);
+    return 1;
+    }
+    else if (strcmp(argv[0], "jobs") == 0) {
+    listjobs(jobs);
+    return 1;
+    }
+    else if (strcmp(argv[0], "quit") == 0) {
+    exit(0);
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -505,5 +561,53 @@ void sigquit_handler(int sig)
     exit(1);
 }
 
+void Sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
+{
+    if (sigprocmask(how, set, oldset) < 0)
+	unix_error("Sigprocmask error");
+    return;
+}
 
+pid_t Fork(void) 
+{
+    pid_t pid;
 
+    if ((pid = fork()) < 0)
+	unix_error("Fork error");
+    return pid;
+}
+
+void Execve(const char *filename, char *const argv[], char *const envp[]) 
+{
+    if (execve(filename, argv, envp) < 0)
+	unix_error("Execve error");
+}
+
+void Sigemptyset(sigset_t *set)
+{
+    if (sigemptyset(set) < 0)
+	unix_error("Sigemptyset error");
+    return;
+}
+
+void Sigfillset(sigset_t *set)
+{ 
+    if (sigfillset(set) < 0)
+	unix_error("Sigfillset error");
+    return;
+}
+
+void Sigaddset(sigset_t *set, int signum)
+{
+    if (sigaddset(set, signum) < 0)
+	unix_error("Sigaddset error");
+    return;
+}
+
+void Setpgid(pid_t pid, pid_t pgid) {
+    int rc;
+
+    if ((rc = setpgid(pid, pgid)) < 0)
+	unix_error("Setpgid error");
+    return;
+}
