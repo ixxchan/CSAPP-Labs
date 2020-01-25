@@ -705,6 +705,33 @@ void Pthread_once(pthread_once_t *once_control, void (*init_function)()) {
     pthread_once(once_control, init_function);
 }
 
+void Pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr) {
+    int rc;
+
+    if ((rc = pthread_rwlock_init(rwlock, attr)) != 0)
+    posix_error(rc, "Pthread_rwlock_init error");
+}
+
+void Pthread_rwlock_rdlock(pthread_rwlock_t *rwlock) {
+    int rc;
+
+    if ((rc = pthread_rwlock_rdlock(rwlock)) != 0)
+    posix_error(rc, "Pthread_rwlock_rdlock error");
+}
+
+void Pthread_rwlock_wrlock(pthread_rwlock_t *rwlock) {
+    int rc;
+
+    if ((rc = pthread_rwlock_wrlock(rwlock)) != 0)
+    posix_error(rc, "Pthread_rwlock_wrlock error");
+}
+
+void Pthread_rwlock_unlock(pthread_rwlock_t *rwlock) {
+    int rc;
+
+    if ((rc = pthread_rwlock_unlock(rwlock)) != 0)
+    posix_error(rc, "Pthread_rwlock_unlock error");
+}
 /*******************************
  * Wrappers for Posix semaphores
  *******************************/

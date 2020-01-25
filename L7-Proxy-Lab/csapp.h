@@ -167,6 +167,11 @@ void Pthread_exit(void *retval);
 pthread_t Pthread_self(void);
 void Pthread_once(pthread_once_t *once_control, void (*init_function)());
 
+void Pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr);
+void Pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);
+void Pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);
+void Pthread_rwlock_unlock(pthread_rwlock_t *rwlock);
+
 /* POSIX semaphore wrappers */
 void Sem_init(sem_t *sem, int pshared, unsigned int value);
 void P(sem_t *sem);

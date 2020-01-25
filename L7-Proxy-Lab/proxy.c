@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "csapp.h"
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -30,6 +31,8 @@ int main(int argc, char **argv)
 	fprintf(stderr, "usage: %s <port>\n", argv[0]);
 	exit(1);
     }
+
+    cache_init();
 
     listenfd = Open_listenfd(argv[1]);
     while (1) {
@@ -80,6 +83,14 @@ void doit(int fd)
 
     parse_uri(uri, hostname, path, port);
 
+    char cache_obj[MAX_OBJECT_SIZE];
+    int obj_size;
+    /* query cache */
+    if((obj_size = cache_find(uri, cache_obj)) > 0) {
+        Rio_writen(fd, cache_obj, obj_size);
+        return;
+    }
+
     /* send request to server */
     printf("proxy connet to host %s port %s\n", hostname, port);
     int serverfd = Open_clientfd(hostname, port);
@@ -96,8 +107,13 @@ void doit(int fd)
     while ((n = Rio_readlineb(&rio_server, buf, MAXLINE))) {
         //printf("proxy received %d bytes,then send\n",n);
         Rio_writen(fd, buf, n);
+        sprintf(cache_obj, "%s%s", cache_obj, buf);
+        obj_size += n;
     }
 
+    if (obj_size <= MAX_OBJECT_SIZE) {
+        cache_add(uri, cache_obj, obj_size);
+    }
     Close(serverfd);
 }
 /* $end doit */
