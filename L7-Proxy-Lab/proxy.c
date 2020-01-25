@@ -1,3 +1,15 @@
+/*
+ * TODO: 
+ * 1. The error-handling functions provide in csapp.c are not appropriate for the proxy 
+ *    because once a server begins accepting connections, it is not supposed to terminate.
+ * 2. The proxy must ignore SIGPIPE signals and should deal gracefully with write operations 
+ *    that return EPIPE errors
+ * 3. Sometimes, calling read to receive bytes from a socket that has been prematurely closed will cause
+ *    read to return -1 with errno set to ECONNRESET. Your proxy should not terminate due to this
+ *    error either.
+ * 4. Maybe other robustness issues?
+ */
+
 #include <stdio.h>
 #include "csapp.h"
 #include "cache.h"
